@@ -22,6 +22,8 @@ sections = {
     ]
 }
 
+initial_height_mm = 59 # Initial sample height in mm
+
 # === HELPER: process one curve ===
 def process_curve(disp, force, smooth = True):
     """
@@ -144,16 +146,6 @@ with PdfPages(output_pdf) as pdf:
                 color = ax._get_lines.get_next_color()
                 ax.plot(x_load, y_load, color = color, linewidth = 1.0, label = f"Trial {i}")
                 ax.plot(x_unload, y_unload, color = color, linewidth = 1.0)
-                
-
-            # === FORMAT ===
-            ax.set_title(f"{section_name} – {side.replace('_', ' ').title()} (All Trials)")
-            ax.set_xlabel("Displacement (mm)")
-            ax.set_ylabel("Force (mN)")
-            ax.grid(True)
-            ax.legend(fontsize = 7)
-            pdf.savefig(fig)
-            plt.close(fig)
 
             # === AVERAGE ACROSS TRIALS ===
             if not all_loads:
@@ -177,32 +169,70 @@ with PdfPages(output_pdf) as pdf:
                 spline = make_interp_spline(x, y, k = 3)
                 unload_interp.append(spline(common_x))
             avg_unload = np.mean(np.column_stack(unload_interp), axis = 1)
-
-            # === PLOT AVERAGE CURVE ===
-            fig, ax = plt.subplots(figsize = (8, 6))
-            ax.plot(common_x, avg_load, color = "black", linewidth = 1.5, label = "Average Load (Smoothed)")
-            ax.plot(common_x, avg_unload, color = "black", linewidth = 1.5)
             
-            # === Detect and annotate initial elastic peak ===
+            
+            # === COMBINED 2x2 PLOT PER SIDE ===
+            fig, axs = plt.subplots(2, 2, figsize=(11, 8))  # 2x2 layout
+            (ax1, ax2), (ax3, ax4) = axs
+
+            # Plot 1: Force–Displacement (All Trials)
+            for i, ((x_load, y_load), (x_unload, y_unload)) in enumerate(zip(all_loads, all_unloads), start=1):
+                color = ax1._get_lines.get_next_color()
+                ax1.plot(x_load, y_load, color=color, linewidth=1.0, label=f"Trial {i}")
+                ax1.plot(x_unload, y_unload, color=color, linewidth=1.0)
+            ax1.set_title("All Trials – Displacement")
+            ax1.set_xlabel("Displacement (mm)")
+            ax1.set_ylabel("Force (mN)")
+            ax1.grid(True)
+            ax1.legend(fontsize=6)
+
+            # Plot 2: Force–Strain (All Trials)
+            for i, ((x_load, y_load), (x_unload, y_unload)) in enumerate(zip(all_loads, all_unloads), start=1):
+                strain_load = x_load / initial_height_mm
+                strain_unload = x_unload / initial_height_mm
+                color = ax2._get_lines.get_next_color()
+                ax2.plot(strain_load, y_load, color=color, linewidth=1.0, label=f"Trial {i}")
+                ax2.plot(strain_unload, y_unload, color=color, linewidth=1.0)
+            ax2.set_title("All Trials – Strain")
+            ax2.set_xlabel("Strain (mm/mm)")
+            ax2.set_ylabel("Force (mN)")
+            ax2.grid(True)
+            ax2.legend(fontsize=6)
+
+            # Plot 3: Average – Displacement
+            ax3.plot(common_x, avg_load, color="black", linewidth=1.5, label="Average Load")
+            ax3.plot(common_x, avg_unload, color="black", linewidth=1.5)
             try:
                 x_peak, y_peak = find_initial_peak(common_x, avg_load)
-                ax.axvline(x = x_peak, color = "red", linestyle = ":", linewidth = 0.8, alpha = 0.8)
-                ax.text(
-                    x_peak, 0, f"{y_peak:.1f} mN",
-                    rotation = 90, va = "bottom", ha = "right",
-                    fontsize = 8, color = "red",
-                    fontweight = "bold"
-                )
+                ax3.axvline(x=x_peak, color="red", linestyle=":", linewidth=0.8)
+                ax3.text(x_peak, 0, f"{y_peak:.1f} mN", fontsize=7, color="red", ha="right", va="bottom", rotation=90)
             except Exception:
                 pass
-            
-            ax.set_title(f"{section_name} – {side.replace('_', ' ').title()} (Average Curve)")
-            ax.set_xlabel("Displacement (mm)")
-            ax.set_ylabel("Force (mN)")
-            ax.grid(True)
-            ax.legend()
+            ax3.set_title("Average – Displacement")
+            ax3.set_xlabel("Displacement (mm)")
+            ax3.set_ylabel("Force (mN)")
+            ax3.grid(True)
+            ax3.legend(fontsize=6)
+
+            # Plot 4: Average – Strain
+            strain_x = common_x / initial_height_mm
+            ax4.plot(strain_x, avg_load, color="black", linewidth=1.5, label="Average Load")
+            ax4.plot(strain_x, avg_unload, color="black", linewidth=1.5)
+            try:
+                x_peak, y_peak = find_initial_peak(strain_x, avg_load)
+                ax4.axvline(x=x_peak, color="red", linestyle=":", linewidth=0.8)
+                ax4.text(x_peak, 0, f"{y_peak:.1f} mN", fontsize=7, color="red", ha="right", va="bottom", rotation=90)
+            except Exception:
+                pass
+            ax4.set_title("Average – Strain")
+            ax4.set_xlabel("Strain (mm/mm)")
+            ax4.set_ylabel("Force (mN)")
+            ax4.grid(True)
+            ax4.legend(fontsize=6)
+
+            fig.suptitle(f"{section_name} – {side.replace('_', ' ').title()}", fontsize=14)
+            fig.tight_layout(rect=[0, 0.03, 1, 0.95])
             pdf.savefig(fig)
             plt.close(fig)
             
-
     print(f"Report saved to: {output_pdf}")
